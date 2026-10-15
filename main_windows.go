@@ -2,7 +2,11 @@ package main
 
 import (
 	"bufio"
+	"crypto/rand"
+	"encoding/hex"
 	"io"
+	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -54,6 +58,7 @@ func main() {
 	for _, c := range a.doctor() {
 		a.write(map[bool]string{true: "[OK]   ", false: "[MISS] "}[c.ok] + c.msg + "\n")
 	}
+	a.startClip()
 	a.mw.Closing().Attach(func(*bool, walk.CloseReason) { a.kill() })
 	a.mw.Run()
 }
@@ -152,4 +157,58 @@ func (a *app) onLine(line string) {
 	case stateWaiting:
 		a.setStatus("Menunggu iPhone...", walk.RGB(230, 140, 0))
 	}
+}
+
+// startClip serves clipHandler on the LAN; see logic.go for the iOS Shortcut side.
+func (a *app) startClip() {
+	token, err := clipToken(filepath.Join(os.Getenv("LOCALAPPDATA"), "iMirror-clip-token.txt"))
+	if err != nil {
+		a.write("Clipboard sync mati: " + err.Error() + "\n")
+		return
+	}
+	// Win32 clipboard must be touched from the UI thread.
+	onUI := func(f func() error) error {
+		done := make(chan error, 1)
+		a.mw.Synchronize(func() { done <- f() })
+		return <-done
+	}
+	get := func() (text string, err error) {
+		err = onUI(func() (e error) { text, e = walk.Clipboard().Text(); return })
+		return
+	}
+	set := func(text string) error {
+		err := onUI(func() error { return walk.Clipboard().SetText(text) })
+		if err == nil {
+			a.mw.Synchronize(func() { a.write("Clipboard diterima dari iPhone\n") })
+		}
+		return err
+	}
+	a.write("Clipboard sync: http://" + lanIP() + ":" + clipPort + "/clip   header X-Token: " + token + "\n")
+	go func() {
+		err := http.ListenAndServe(":"+clipPort, clipHandler(token, get, set))
+		a.mw.Synchronize(func() { a.write("Clipboard sync berhenti: " + err.Error() + "\n") })
+	}()
+}
+
+// clipToken reads the saved token or creates one, so the iPhone Shortcut keeps working across restarts.
+func clipToken(path string) (string, error) {
+	if b, err := os.ReadFile(path); err == nil && len(strings.TrimSpace(string(b))) >= 16 {
+		return strings.TrimSpace(string(b)), nil
+	}
+	b := make([]byte, 8)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	token := hex.EncodeToString(b)
+	return token, os.WriteFile(path, []byte(token), 0o600)
+}
+
+// lanIP is the address the default route uses; UDP dial sends no packets.
+func lanIP() string {
+	c, err := net.Dial("udp", "8.8.8.8:80")
+	if err != nil {
+		return "<ip-pc>"
+	}
+	defer c.Close()
+	return c.LocalAddr().(*net.UDPAddr).IP.String()
 }

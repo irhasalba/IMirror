@@ -1,6 +1,7 @@
 package main
 
 import (
+	"net/http/httptest"
 	"slices"
 	"strings"
 	"testing"
@@ -31,5 +32,38 @@ func TestUxplayCmd(t *testing.T) {
 	}
 	if !strings.HasPrefix(env[0], "PATH=") || !strings.HasSuffix(env[0], `;C:\Windows`) {
 		t.Errorf("PATH env = %q", env[0])
+	}
+}
+
+func TestClipHandler(t *testing.T) {
+	clip := "dari pc"
+	h := clipHandler("rahasia", func() (string, error) { return clip, nil }, func(s string) error { clip = s; return nil })
+	do := func(method, token, body string) *httptest.ResponseRecorder {
+		r := httptest.NewRequest(method, "/clip", strings.NewReader(body))
+		r.Header.Set("X-Token", token)
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, r)
+		return w
+	}
+	if w := do("GET", "salah", ""); w.Code != 401 {
+		t.Errorf("wrong token: code %d", w.Code)
+	}
+	if w := do("GET", "", ""); w.Code != 401 {
+		t.Errorf("empty token: code %d", w.Code)
+	}
+	if w := do("POST", "salah", "jahat"); w.Code != 401 || clip != "dari pc" {
+		t.Errorf("wrong token POST changed clip: code %d clip %q", w.Code, clip)
+	}
+	if w := do("GET", "rahasia", ""); w.Code != 200 || w.Body.String() != "dari pc" {
+		t.Errorf("GET: code %d body %q", w.Code, w.Body)
+	}
+	if w := do("POST", "rahasia", "dari iphone"); w.Code != 204 || clip != "dari iphone" {
+		t.Errorf("POST: code %d clip %q", w.Code, clip)
+	}
+	if w := do("POST", "rahasia", strings.Repeat("x", maxClip+1)); w.Code != 413 || clip != "dari iphone" {
+		t.Errorf("oversize POST: code %d", w.Code)
+	}
+	if w := do("PUT", "rahasia", ""); w.Code != 405 {
+		t.Errorf("PUT: code %d", w.Code)
 	}
 }

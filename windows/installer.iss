@@ -3,6 +3,7 @@
 #define AppVersion "1.0.0"
 #define Dist "D:\imirror-build\dist\iMirror"
 #define FwRule "iMirror (uxplay)"
+#define FwClipRule "iMirror (clipboard)"
 
 [Setup]
 AppId={{6B0E6A3C-3F57-4C8E-9B5E-1D2C7A9F0E41}
@@ -39,13 +40,16 @@ Name: "{autodesktop}\{#AppName}"; Filename: "{app}\iMirror.exe"; Tasks: desktopi
 [Run]
 ; pre-allow inbound AirPlay on private networks so users never see the firewall popup
 Filename: "netsh.exe"; Parameters: "advfirewall firewall add rule name=""{#FwRule}"" dir=in action=allow program=""{app}\uxplay\bin\uxplay.exe"" profile=private enable=yes"; Flags: runhidden; Check: IsAdminInstallMode
+Filename: "netsh.exe"; Parameters: "advfirewall firewall add rule name=""{#FwClipRule}"" dir=in action=allow program=""{app}\iMirror.exe"" protocol=TCP localport=7123 profile=private enable=yes"; Flags: runhidden; Check: IsAdminInstallMode
 Filename: "{app}\iMirror.exe"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
 Filename: "netsh.exe"; Parameters: "advfirewall firewall delete rule name=""{#FwRule}"""; Flags: runhidden; RunOnceId: "DelFwRule"; Check: IsAdminInstallMode
+Filename: "netsh.exe"; Parameters: "advfirewall firewall delete rule name=""{#FwClipRule}"""; Flags: runhidden; RunOnceId: "DelFwClipRule"; Check: IsAdminInstallMode
 
 [UninstallDelete]
 Type: files; Name: "{localappdata}\iMirror-gst-registry.bin"
+Type: files; Name: "{localappdata}\iMirror-clip-token.txt"
 
 [Code]
 function InitializeSetup(): Boolean;
