@@ -14,18 +14,20 @@ iMirror is a Go GUI ([lxn/walk](https://github.com/lxn/walk)) that runs [UxPlay]
 - iPhone and PC on the same network
 - Firewall: allow iMirror/uxplay on Private networks (the installer adds the rules)
 
-On launch, iMirror shows `[OK]`/`[MISS]` checks for the above.
+On launch, the **System checks** panel shows the status of the above.
+
+The UI is available in English and Bahasa Indonesia (**Language** dropdown in the toolbar; defaults to Indonesian on an Indonesian Windows, otherwise English, and the choice is saved in `%LOCALAPPDATA%\iMirror-lang.txt`). The log is always English.
 
 ## Usage
 
-1. Open iMirror, set the name shown on the iPhone (**Nama di iPhone**), click **Start**.
+1. Open iMirror, set **Name shown on iPhone**, click **Start**.
 2. On the iPhone: Control Center > Screen Mirroring > pick that name.
 
 Fixed ports (`uxplay -p`): TCP 7000, 7001, 7100 · UDP 6000, 6001, 7011.
 
 ## Clipboard sync (iOS Shortcuts)
 
-iMirror serves `http://<pc-ip>:7123/clip`, guarded by an `X-Token` header. The URL and token are printed in the log on start; the token is saved in `%LOCALAPPDATA%\iMirror-clip-token.txt`.
+iMirror serves `http://<pc-ip>:7123/clip`, guarded by an `X-Token` header. The URL and token are shown in the **Clipboard sync** panel (with **Copy** buttons); the token is saved in `%LOCALAPPDATA%\iMirror-clip-token.txt`.
 
 | Method | Action |
 |--------|--------|

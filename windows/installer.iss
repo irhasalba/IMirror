@@ -1,6 +1,6 @@
 ; iMirror installer. Build: windows/build-installer.sh (or D:\InnoSetup\ISCC.exe installer.iss)
 #define AppName "iMirror"
-#define AppVersion "1.0.0"
+#define AppVersion "1.1.0"
 #define Dist "D:\imirror-build\dist\iMirror"
 #define FwRule "iMirror (uxplay)"
 #define FwClipRule "iMirror (clipboard)"

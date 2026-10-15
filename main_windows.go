@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -14,80 +15,91 @@ import (
 	"syscall"
 
 	"github.com/lxn/walk"
-	. "github.com/lxn/walk/declarative"
 )
 
 const createNoWindow = 0x08000000
 
 type app struct {
-	mw     *walk.MainWindow
-	name   *walk.LineEdit
-	btn    *walk.PushButton
-	status *walk.Label
-	log    *walk.TextEdit
-	proc   *exec.Cmd
-	bundle string
+	mw       *walk.MainWindow
+	name     *walk.LineEdit
+	btn      *walk.CustomWidget
+	btnFont  *walk.Font
+	tile     *walk.CustomWidget
+	iconFont *walk.Font
+	dot      *walk.Label
+	caption  *walk.Label
+	title    *walk.Label
+	sub      *walk.Label
+	step3    *walk.Label
+	endpoint *walk.LineEdit
+	token    *walk.LineEdit
+	reveal   *walk.Label
+	clear    *walk.Label
+	ready    *walk.Label
+	log      *walk.TextEdit
+	lang     string          // "en" or "id", see i18n.go
+	mode     string          // "stopped", "waiting" or "connected": i18n key prefix
+	checks   []check         // doctor results, re-rendered on language change
+	revealed bool            // token shown in clear text
+	langMenu *walk.Action    // toolbar language dropdown
+	langActs []**walk.Action // one per langs entry
+	retext   []func()        // re-applies translated text after a language change
+	proc     *exec.Cmd
+	bundle   string
 }
 
+// Layout lives in ui_windows.go, colors and widget helpers in style_windows.go.
 func main() {
 	exePath, _ := os.Executable()
 	a := &app{bundle: filepath.Join(filepath.Dir(exePath), "uxplay")}
-	err := MainWindow{
-		AssignTo: &a.mw,
-		Title:    "iMirror",
-		Size:     Size{Width: 620, Height: 420},
-		Layout:   VBox{},
-		Children: []Widget{
-			Composite{
-				Layout: HBox{MarginsZero: true},
-				Children: []Widget{
-					Label{Text: "Nama di iPhone:"},
-					LineEdit{AssignTo: &a.name, Text: "iMirror", MaxSize: Size{Width: 150}},
-					PushButton{AssignTo: &a.btn, Text: "Start", OnClicked: a.toggle},
-					Label{AssignTo: &a.status, Text: "Stopped", TextColor: walk.RGB(128, 128, 128)},
-					HSpacer{},
-				},
-			},
-			TextEdit{AssignTo: &a.log, ReadOnly: true, VScroll: true, Font: Font{Family: "Consolas", PointSize: 9}},
-		},
-	}.Create()
-	if err != nil {
+	a.checks = a.doctor()
+	if err := a.buildUI(); err != nil {
 		panic(err)
-	}
-	a.write("iPhone: Control Center > Screen Mirroring > pilih nama di atas.\n")
-	for _, c := range a.doctor() {
-		a.write(map[bool]string{true: "[OK]   ", false: "[MISS] "}[c.ok] + c.msg + "\n")
 	}
 	a.startClip()
 	a.mw.Closing().Attach(func(*bool, walk.CloseReason) { a.kill() })
 	a.mw.Run()
 }
 
+// check holds i18n keys, not text, so it can be re-rendered in another language.
 type check struct {
-	ok  bool
-	msg string
+	ok         bool
+	title, sub string
+	mono       bool
+}
+
+func quiet(name string, args ...string) string {
+	c := exec.Command(name, args...)
+	c.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: createNoWindow}
+	out, _ := c.Output()
+	return string(out)
 }
 
 func (a *app) doctor() []check {
 	exe, _, _ := uxplayCmd(a.bundle, "x", "", "")
 	_, statErr := os.Stat(exe)
-	sc := exec.Command("sc", "query", "Bonjour Service")
-	sc.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: createNoWindow}
-	out, _ := sc.Output()
-	return []check{
-		{statErr == nil, `uxplay.exe ada di folder uxplay\bin`},
-		{strings.Contains(string(out), "RUNNING"), "Bonjour Service berjalan (install 'Bonjour Print Services for Windows' dari Apple)"},
-		{true, "Saat pertama Start, izinkan iMirror/uxplay di popup Windows Firewall (Private network)"},
+	bonjour := strings.Contains(quiet("sc", "query", "Bonjour Service"), "RUNNING")
+	// Rule is added by the installer (admin mode); portable copies rely on the Windows popup.
+	fw := strings.Contains(quiet("netsh", "advfirewall", "firewall", "show", "rule", "name=iMirror (uxplay)"), "iMirror (uxplay)")
+	cs := []check{
+		{statErr == nil, "uxplay.ok", "uxplay.sub", true},
+		{bonjour, "bonjour.ok", "bonjour.ok.sub", false},
+		{fw, "firewall", "firewall.ok.sub", false},
 	}
+	if statErr != nil {
+		cs[0].title = "uxplay.miss"
+	}
+	if !bonjour {
+		cs[1].title, cs[1].sub = "bonjour.miss", "bonjour.miss.sub"
+	}
+	if !fw {
+		cs[2].sub = "firewall.miss.sub"
+	}
+	return cs
 }
 
 func (a *app) write(s string) {
 	a.log.AppendText(strings.ReplaceAll(s, "\n", "\r\n"))
-}
-
-func (a *app) setStatus(text string, c walk.Color) {
-	a.status.SetText(text)
-	a.status.SetTextColor(c)
 }
 
 func (a *app) kill() {
@@ -101,13 +113,9 @@ func (a *app) toggle() {
 		a.kill()
 		return
 	}
-	name := strings.TrimSpace(a.name.Text())
-	if name == "" {
-		name = "iMirror"
-	}
-	exe, args, env := uxplayCmd(a.bundle, name, os.Getenv("PATH"), os.Getenv("LOCALAPPDATA"))
+	exe, args, env := uxplayCmd(a.bundle, a.deviceName(), os.Getenv("PATH"), os.Getenv("LOCALAPPDATA"))
 	if _, err := os.Stat(exe); err != nil {
-		a.write("uxplay tidak ditemukan, lihat [MISS] di atas.\n")
+		a.write("uxplay.exe not found, see System checks.\n")
 		return
 	}
 	a.write("$ " + exe + " " + strings.Join(args, " ") + "\n")
@@ -117,12 +125,11 @@ func (a *app) toggle() {
 	pr, pw := io.Pipe()
 	cmd.Stdout, cmd.Stderr = pw, pw
 	if err := cmd.Start(); err != nil {
-		a.write("gagal start: " + err.Error() + "\n")
+		a.write("failed to start uxplay: " + err.Error() + "\n")
 		return
 	}
 	a.proc = cmd
-	a.btn.SetText("Stop")
-	a.setStatus("Menunggu iPhone...", walk.RGB(230, 140, 0))
+	a.show("waiting")
 	go func() {
 		err := cmd.Wait()
 		pw.CloseWithError(err)
@@ -142,10 +149,9 @@ func (a *app) pump(cmd *exec.Cmd, r io.Reader) {
 		a.mw.Synchronize(func() { a.onLine(line) })
 	}
 	a.mw.Synchronize(func() {
-		a.write("uxplay berhenti (exit " + cmd.ProcessState.String() + ")\n")
+		a.write("uxplay stopped (exit " + cmd.ProcessState.String() + ")\n")
 		a.proc = nil
-		a.btn.SetText("Start")
-		a.setStatus("Stopped", walk.RGB(128, 128, 128))
+		a.show("stopped")
 	})
 }
 
@@ -153,9 +159,9 @@ func (a *app) onLine(line string) {
 	a.write(line + "\n")
 	switch statusFor(line) {
 	case stateConnected:
-		a.setStatus("Terhubung", walk.RGB(0, 150, 0))
+		a.show("connected")
 	case stateWaiting:
-		a.setStatus("Menunggu iPhone...", walk.RGB(230, 140, 0))
+		a.show("waiting")
 	}
 }
 
@@ -163,7 +169,8 @@ func (a *app) onLine(line string) {
 func (a *app) startClip() {
 	token, err := clipToken(filepath.Join(os.Getenv("LOCALAPPDATA"), "iMirror-clip-token.txt"))
 	if err != nil {
-		a.write("Clipboard sync mati: " + err.Error() + "\n")
+		a.endpoint.SetText(fmt.Sprintf(a.t("clip.off"), err))
+		a.write("Clipboard sync off: " + err.Error() + "\n")
 		return
 	}
 	// Win32 clipboard must be touched from the UI thread.
@@ -179,14 +186,15 @@ func (a *app) startClip() {
 	set := func(text string) error {
 		err := onUI(func() error { return walk.Clipboard().SetText(text) })
 		if err == nil {
-			a.mw.Synchronize(func() { a.write("Clipboard diterima dari iPhone\n") })
+			a.mw.Synchronize(func() { a.write("Clipboard received from iPhone\n") })
 		}
 		return err
 	}
-	a.write("Clipboard sync: http://" + lanIP() + ":" + clipPort + "/clip   header X-Token: " + token + "\n")
+	a.endpoint.SetText("http://" + lanIP() + ":" + clipPort + "/clip")
+	a.token.SetText(token)
 	go func() {
 		err := http.ListenAndServe(":"+clipPort, clipHandler(token, get, set))
-		a.mw.Synchronize(func() { a.write("Clipboard sync berhenti: " + err.Error() + "\n") })
+		a.mw.Synchronize(func() { a.write("Clipboard sync stopped: " + err.Error() + "\n") })
 	}()
 }
 
