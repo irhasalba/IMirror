@@ -7,6 +7,9 @@
 package main
 
 import (
+	"crypto/subtle"
+	"io"
+	"net/http"
 	"path/filepath"
 	"strings"
 )
@@ -48,4 +51,43 @@ func statusFor(line string) state {
 		return stateWaiting
 	}
 	return stateNone
+}
+
+// Clipboard sync: iPhone has no API to read our clipboard (no Continuity on Windows),
+// so an iOS Shortcut calls GET/POST /clip on the LAN with the X-Token header.
+const (
+	clipPort = "7123"
+	maxClip  = 1 << 20
+)
+
+func clipHandler(token string, get func() (string, error), set func(string) error) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if token == "" || subtle.ConstantTimeCompare([]byte(r.Header.Get("X-Token")), []byte(token)) != 1 {
+			http.Error(w, "bad token", http.StatusUnauthorized)
+			return
+		}
+		switch r.Method {
+		case http.MethodGet:
+			text, err := get()
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			io.WriteString(w, text)
+		case http.MethodPost:
+			body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxClip))
+			if err != nil {
+				http.Error(w, "too large", http.StatusRequestEntityTooLarge)
+				return
+			}
+			if err := set(string(body)); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			http.Error(w, "GET or POST", http.StatusMethodNotAllowed)
+		}
+	})
 }
