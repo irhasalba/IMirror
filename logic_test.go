@@ -67,3 +67,16 @@ func TestClipHandler(t *testing.T) {
 		t.Errorf("PUT: code %d", w.Code)
 	}
 }
+
+func TestLanguagesHaveSameKeys(t *testing.T) {
+	for _, l := range langs {
+		for k := range strs["en"] {
+			if _, ok := strs[l.code][k]; !ok {
+				t.Errorf("%s missing %q", l.code, k)
+			}
+		}
+		if len(strs[l.code]) != len(strs["en"]) {
+			t.Errorf("%s has %d keys, en has %d", l.code, len(strs[l.code]), len(strs["en"]))
+		}
+	}
+}
