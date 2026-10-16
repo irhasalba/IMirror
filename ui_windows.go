@@ -35,6 +35,7 @@ func (a *app) buildUI() error {
 	err := MainWindow{
 		AssignTo:   &a.mw,
 		Title:      "iMirror",
+		Icon:       2, // icon group ID from rsrc (manifest=1); walk's default looks for 7
 		Size:       Size{Width: 820, Height: 780},
 		MinSize:    Size{Width: 700, Height: 660},
 		Background: fill(colBg),

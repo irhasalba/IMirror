@@ -3,6 +3,8 @@
 set -e
 cd "$(dirname "$0")"
 ./build-gui.sh
-cp installer.iss /mnt/d/imirror-build/installer.iss
+cp installer.iss ../icons/icons.ico /mnt/d/imirror-build/
+cp README.txt /mnt/d/imirror-build/dist/iMirror/
+rm -f /mnt/d/imirror-build/dist/iMirror/BACA-SAYA.txt
 powershell.exe -NoProfile -Command '& D:\InnoSetup\ISCC.exe /Q D:\imirror-build\installer.iss; exit $LASTEXITCODE' | tr -d '\r'
 ls -la /mnt/d/imirror-build/iMirror-Setup-*.exe

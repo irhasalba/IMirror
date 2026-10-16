@@ -1,6 +1,6 @@
 ; iMirror installer. Build: windows/build-installer.sh (or D:\InnoSetup\ISCC.exe installer.iss)
 #define AppName "iMirror"
-#define AppVersion "1.1.0"
+#define AppVersion "1.0.0"
 #define Dist "D:\imirror-build\dist\iMirror"
 #define FwRule "iMirror (uxplay)"
 #define FwClipRule "iMirror (clipboard)"
@@ -25,6 +25,7 @@ SolidCompression=yes
 UninstallDisplayIcon={app}\iMirror.exe
 LicenseFile={#Dist}\UXPLAY-LICENSE-GPL3.txt
 WizardStyle=modern
+SetupIconFile=icons.ico
 
 [Tasks]
 Name: desktopicon; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"
@@ -56,7 +57,7 @@ function InitializeSetup(): Boolean;
 begin
   Result := True;
   if not RegKeyExists(HKLM, 'SYSTEM\CurrentControlSet\Services\Bonjour Service') then
-    MsgBox('Bonjour Service belum terpasang. iMirror butuh Bonjour agar iPhone bisa menemukan PC ini.' + #13#10 +
-           'Install "Bonjour Print Services for Windows" dari situs Apple, lalu jalankan iMirror.',
+    MsgBox('Bonjour Service is not installed. iMirror needs Bonjour so your iPhone can find this PC.' + #13#10 +
+           'Install "Bonjour Print Services for Windows" from Apple, then run iMirror.',
            mbInformation, MB_OK);
 end;
