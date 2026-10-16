@@ -8,6 +8,10 @@ iPhone -> AirPlay (Screen Mirroring) -> UxPlay -> GStreamer window (D3D11)
 
 iMirror is a Go GUI ([lxn/walk](https://github.com/lxn/walk)) that runs [UxPlay](https://github.com/FDH2/UxPlay) as an AirPlay receiver, plus text clipboard sync over the LAN.
 
+## Screenshot
+<img width="806" height="770" alt="image" src="https://github.com/user-attachments/assets/0cf16e69-4bbc-40e8-964c-547e98738fe9" />
+
+
 ## Requirements (Windows)
 
 - [Bonjour Print Services for Windows](https://support.apple.com/kb/DL999) (the "Bonjour Service" must be running)
